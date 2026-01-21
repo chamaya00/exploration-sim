@@ -12,27 +12,27 @@ Build a simulation game where users create explorers, send them into a persisten
 
 ## Tech Stack
 
-- **Backend:** Node.js + Express + TypeScript
-- **Database:** SQLite (easy to swap to Postgres later)
+- **Backend:** Node.js + Express + TypeScript (deployed on Render)
+- **Database:** PostgreSQL via Supabase
 - **Frontend:** Next.js 14 + Tailwind CSS
 - **Tick System:** node-cron (15-minute intervals)
-- **Auth:** Simple email magic link (or skip for MVP, use device ID)
+- **Auth:** Supabase Auth (email/password or magic link)
 
 -----
 
 ## Database Schema
 
 ```sql
--- Users (simplified for MVP)
+-- Users (managed by Supabase Auth, but we reference them)
 CREATE TABLE users (
-    id TEXT PRIMARY KEY,
+    id UUID PRIMARY KEY REFERENCES auth.users(id),
     email TEXT UNIQUE,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Player legacy and progression
 CREATE TABLE player_legacy (
-    user_id TEXT PRIMARY KEY REFERENCES users(id),
+    user_id UUID PRIMARY KEY REFERENCES users(id),
     total_explorers INTEGER DEFAULT 0,
     total_returns INTEGER DEFAULT 0,
     total_deaths INTEGER DEFAULT 0,
@@ -41,26 +41,26 @@ CREATE TABLE player_legacy (
     stat_floor_cunning INTEGER DEFAULT 1,
     stat_floor_resolve INTEGER DEFAULT 1,
     stat_floor_fortune INTEGER DEFAULT 1,
-    unlocked_specialties TEXT DEFAULT '[]',  -- JSON array
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    unlocked_specialties JSONB DEFAULT '[]',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Player's item collection
 CREATE TABLE player_items (
-    id TEXT PRIMARY KEY,
-    user_id TEXT REFERENCES users(id),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id),
     item_id TEXT NOT NULL,
     found_by TEXT,           -- Explorer name who found it
     found_in TEXT,           -- Region
     found_on_day INTEGER,
-    is_equipped INTEGER DEFAULT 0,  -- Currently on an explorer
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    is_equipped BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Explorers
 CREATE TABLE explorers (
-    id TEXT PRIMARY KEY,
-    user_id TEXT REFERENCES users(id),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id),
     name TEXT NOT NULL,
 
     -- Stats (1-10)
@@ -75,7 +75,7 @@ CREATE TABLE explorers (
     keepsake TEXT,
 
     -- Equipped items (JSON array of item IDs)
-    equipped_items TEXT DEFAULT '[]',
+    equipped_items JSONB DEFAULT '[]',
 
     -- Current state
     status TEXT DEFAULT 'active',  -- active, returning, returned, dead
@@ -84,31 +84,31 @@ CREATE TABLE explorers (
     days_alive REAL DEFAULT 0,
 
     -- Recall state
-    is_recalling INTEGER DEFAULT 0,
+    is_recalling BOOLEAN DEFAULT false,
     recall_days_remaining REAL DEFAULT 0,
 
     -- Found items during journey (JSON array)
-    found_items TEXT DEFAULT '[]',
+    found_items JSONB DEFAULT '[]',
 
     -- Outcome
     cause_of_death TEXT,
     legacy_bonus_type TEXT,
     legacy_bonus_value TEXT,
 
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Journal entries
 CREATE TABLE journal_entries (
-    id TEXT PRIMARY KEY,
-    explorer_id TEXT REFERENCES explorers(id),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    explorer_id UUID REFERENCES explorers(id),
     day INTEGER NOT NULL,
     tick INTEGER NOT NULL,
     entry_text TEXT NOT NULL,
     event_type TEXT,  -- quiet, discovery, danger, injury, item_found, recall, death
-    is_significant INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    is_significant BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- World state (shared across all players)
@@ -118,20 +118,20 @@ CREATE TABLE world_state (
     total_explorers_ever INTEGER DEFAULT 0,
     total_deaths_ever INTEGER DEFAULT 0,
     total_returns_ever INTEGER DEFAULT 0,
-    discovered_secrets TEXT DEFAULT '[]',  -- JSON array of secret IDs
-    region_states TEXT DEFAULT '{}',       -- JSON object
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    discovered_secrets JSONB DEFAULT '[]',
+    region_states JSONB DEFAULT '{}',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- World discoveries (first-to-find credit)
 CREATE TABLE world_discoveries (
-    id TEXT PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     secret_id TEXT NOT NULL,
     discovered_by_explorer TEXT,
-    discovered_by_user TEXT,
+    discovered_by_user UUID,
     discovered_on_tick INTEGER,
     region TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
@@ -1283,7 +1283,7 @@ Response: {
 │   │   │   └── journal-templates.ts
 │   │   ├── /db
 │   │   │   ├── schema.sql
-│   │   │   ├── connection.ts
+│   │   │   ├── supabase.ts          # Supabase client setup
 │   │   │   └── queries.ts
 │   │   ├── /simulation
 │   │   │   ├── tick.ts
@@ -1343,7 +1343,8 @@ Response: {
 
 ### Day 1: Core Backend (8-10 hours)
 
-1. ☐ Database setup + schema
+1. ☐ Supabase project setup + schema deployment
+1. ☐ Supabase Auth configuration
 1. ☐ Data files (regions, items, etc.)
 1. ☐ Roll/create explorer endpoints
 1. ☐ Basic tick simulation (survival + journal)
@@ -1440,24 +1441,148 @@ Response: {
 
 -----
 
+## Deployment & Infrastructure
+
+### Supabase Setup
+
+1. **Create a Supabase Project:**
+   - Go to https://supabase.com
+   - Create a new project
+   - Note your project URL and API keys
+
+2. **Run Database Migrations:**
+   - Navigate to SQL Editor in Supabase dashboard
+   - Copy and paste the schema from the Database Schema section
+   - Execute to create tables
+
+3. **Configure Row Level Security (RLS):**
+   - Enable RLS on all tables
+   - Add policies for user access:
+     ```sql
+     -- Example: Users can only access their own data
+     CREATE POLICY "Users can read own legacy"
+       ON player_legacy FOR SELECT
+       USING (auth.uid() = user_id);
+
+     CREATE POLICY "Users can read own explorers"
+       ON explorers FOR SELECT
+       USING (auth.uid() = user_id);
+     ```
+
+4. **Set up Supabase Auth:**
+   - Configure email provider in Authentication settings
+   - Optional: Set up magic link authentication
+   - Configure redirect URLs for your domain
+
+### Render Deployment
+
+1. **Prepare Your Repository:**
+   - Ensure all code is pushed to GitHub
+   - Add a `render.yaml` file (optional) for configuration:
+     ```yaml
+     services:
+       - type: web
+         name: the-beyond-backend
+         env: node
+         buildCommand: cd backend && npm install && npm run build
+         startCommand: cd backend && npm start
+         envVars:
+           - key: SUPABASE_URL
+             sync: false
+           - key: SUPABASE_ANON_KEY
+             sync: false
+           - key: SUPABASE_SERVICE_KEY
+             sync: false
+     ```
+
+2. **Create Render Service:**
+   - Go to https://render.com
+   - Create a new Web Service
+   - Connect your GitHub repository
+   - Select the backend directory
+   - Set build command: `cd backend && npm install && npm run build`
+   - Set start command: `cd backend && npm start`
+
+3. **Configure Environment Variables:**
+   - Add all Supabase credentials
+   - Set NODE_ENV to 'production'
+   - Configure PORT (Render provides this automatically)
+
+4. **Deploy Frontend:**
+   - Deploy Next.js frontend to Vercel or Render
+   - Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY
+   - Configure API endpoint to point to Render backend
+
+### Database Connection Example
+
+```typescript
+// backend/src/db/supabase.ts
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY!;
+
+// Server-side client with service role for admin operations
+export const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false
+  }
+});
+
+// For user-scoped operations, use the anon key with user JWT
+export const createUserClient = (userToken: string) => {
+  return createClient(supabaseUrl, process.env.SUPABASE_ANON_KEY!, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${userToken}`
+      }
+    }
+  });
+};
+```
+
+-----
+
 ## Quick Start Commands
 
 ```bash
 # Backend
 cd backend
 npm init -y
-npm install express typescript ts-node @types/node @types/express better-sqlite3 node-cron uuid
+npm install express typescript ts-node @types/node @types/express @supabase/supabase-js node-cron dotenv
 npm install -D nodemon
 npx tsc --init
+
+# Create .env file
+cat > .env << EOF
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_KEY=your_supabase_service_key
+PORT=3001
+EOF
 
 # Frontend
 cd frontend
 npx create-next-app@latest . --typescript --tailwind --app
-npm install lucide-react
+npm install lucide-react @supabase/supabase-js
 
-# Run
+# Create .env.local file
+cat > .env.local << EOF
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+EOF
+
+# Run locally
 cd backend && npm run dev
 cd frontend && npm run dev
+
+# Deploy to Render
+# 1. Push code to GitHub
+# 2. Create new Web Service on Render
+# 3. Connect your repository
+# 4. Set environment variables (SUPABASE_URL, SUPABASE_ANON_KEY, etc.)
+# 5. Deploy
 ```
 
 -----
