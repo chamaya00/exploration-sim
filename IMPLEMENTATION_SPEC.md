@@ -12,11 +12,22 @@ Build a simulation game where users create explorers, send them into a persisten
 
 ## Tech Stack
 
-- **Backend:** Node.js + Express + TypeScript (deployed on Render)
-- **Database:** PostgreSQL via Supabase
+### Development (Local)
+- **Backend:** Node.js + Express + TypeScript
+- **Database:** PostgreSQL 15 (via Docker)
 - **Frontend:** Next.js 14 + Tailwind CSS
 - **Tick System:** node-cron (15-minute intervals)
+- **Auth:** Simple auth or device ID (for local testing)
+- **Containerization:** Docker + Docker Compose
+
+### Production (Deployed)
+- **Backend:** Node.js + Express + TypeScript (deployed on Render)
+- **Database:** PostgreSQL via Supabase
+- **Frontend:** Next.js 14 + Tailwind CSS (Vercel or Render)
+- **Tick System:** node-cron (15-minute intervals)
 - **Auth:** Supabase Auth (email/password or magic link)
+
+**Development Philosophy:** Build locally with Docker for fast iteration, then migrate to Supabase + Render for production. The codebase supports both environments through a unified database abstraction layer.
 
 -----
 
@@ -1271,7 +1282,11 @@ Response: {
 
 ```
 /the-beyond
+├── docker-compose.yml           # Docker orchestration
+├── README.md
+│
 ├── /backend
+│   ├── Dockerfile               # Backend container config
 │   ├── /src
 │   │   ├── /data
 │   │   │   ├── regions.ts
@@ -1282,9 +1297,11 @@ Response: {
 │   │   │   ├── trials.ts
 │   │   │   └── journal-templates.ts
 │   │   ├── /db
-│   │   │   ├── schema.sql
+│   │   │   ├── schema.sql           # PostgreSQL schema
+│   │   │   ├── index.ts             # Unified DB abstraction
+│   │   │   ├── connection.ts        # Docker PostgreSQL connection
 │   │   │   ├── supabase.ts          # Supabase client setup
-│   │   │   └── queries.ts
+│   │   │   └── queries.ts           # Query functions
 │   │   ├── /simulation
 │   │   │   ├── tick.ts
 │   │   │   ├── survival.ts
@@ -1302,6 +1319,9 @@ Response: {
 │   │   ├── /jobs
 │   │   │   └── tick-scheduler.ts
 │   │   └── index.ts
+│   ├── .env.development         # Docker environment
+│   ├── .env.production          # Render environment
+│   ├── .gitignore
 │   ├── package.json
 │   └── tsconfig.json
 │
@@ -1331,10 +1351,13 @@ Response: {
 │   │   └── /lib
 │   │       ├── api.ts
 │   │       └── types.ts
+│   ├── .env.local               # Frontend environment
+│   ├── .gitignore
 │   ├── package.json
+│   ├── next.config.js
 │   └── tailwind.config.js
 │
-└── README.md
+└── .gitignore
 ```
 
 -----
@@ -1343,8 +1366,11 @@ Response: {
 
 ### Day 1: Core Backend (8-10 hours)
 
-1. ☐ Supabase project setup + schema deployment
-1. ☐ Supabase Auth configuration
+**Start with Docker for rapid local development:**
+
+1. ☐ Docker setup (docker-compose.yml + Dockerfile)
+1. ☐ PostgreSQL schema deployment (via Docker)
+1. ☐ Database connection layer (pg driver)
 1. ☐ Data files (regions, items, etc.)
 1. ☐ Roll/create explorer endpoints
 1. ☐ Basic tick simulation (survival + journal)
@@ -1366,6 +1392,17 @@ Response: {
 1. ☐ Item discovery + collection
 1. ☐ World state + discoveries
 1. ☐ Testing full loop
+
+### Post-MVP: Production Deployment (2-3 hours)
+
+1. ☐ Create Supabase project
+1. ☐ Run schema in Supabase SQL Editor
+1. ☐ Configure Supabase Auth
+1. ☐ Add Supabase client to codebase
+1. ☐ Test with Supabase locally
+1. ☐ Deploy backend to Render
+1. ☐ Deploy frontend to Vercel
+1. ☐ Test production deployment
 
 -----
 
@@ -1441,7 +1478,300 @@ Response: {
 
 -----
 
+## Recommended Development Workflow
+
+### Daily Development Cycle
+
+1. **Start Docker Services:**
+   ```bash
+   docker-compose up -d
+   docker-compose logs -f backend
+   ```
+
+2. **Run Frontend:**
+   ```bash
+   cd frontend && npm run dev
+   ```
+
+3. **Make Changes:**
+   - Edit backend code (auto-reloads via nodemon)
+   - Edit frontend code (Next.js hot reload)
+   - Test in browser at `http://localhost:3000`
+
+4. **Check Database:**
+   ```bash
+   # Connect to PostgreSQL
+   docker exec -it the-beyond-db psql -U postgres -d the_beyond
+
+   # Run queries
+   SELECT * FROM explorers;
+   SELECT * FROM journal_entries ORDER BY created_at DESC LIMIT 10;
+   ```
+
+5. **Reset Database (if needed):**
+   ```bash
+   docker-compose down -v
+   docker-compose up -d
+   ```
+
+### Testing Migration to Production
+
+Before deploying to Render + Supabase, test the migration locally:
+
+1. **Create Supabase project** (free tier)
+2. **Run schema** in Supabase SQL Editor
+3. **Update .env** to use Supabase credentials
+4. **Test locally** with Supabase backend
+5. **Revert to Docker** for continued development
+
+### Git Workflow
+
+```bash
+# Add gitignore
+cat > .gitignore << 'EOF'
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.production
+.env.*.local
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# TypeScript
+*.tsbuildinfo
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+EOF
+
+# Commit regularly
+git add .
+git commit -m "Feature: Add explorer creation flow"
+git push origin main
+```
+
+-----
+
+## .gitignore Template
+
+```gitignore
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+package-lock.json
+yarn.lock
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.production
+.env.*.local
+*.env
+
+# Next.js
+frontend/.next/
+frontend/out/
+frontend/build/
+
+# Build output
+backend/dist/
+backend/build/
+*.tsbuildinfo
+
+# Docker
+docker-compose.override.yml
+postgres_data/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Backup files
+backup.sql
+*.backup
+```
+
+-----
+
+## Local Development with Docker
+
+### Docker Setup
+
+For local development, use Docker to run PostgreSQL and test your application before deploying to production.
+
+**docker-compose.yml:**
+```yaml
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: the-beyond-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: the_beyond
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/src/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: the-beyond-backend
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/the_beyond
+      NODE_ENV: development
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: npm run dev
+
+volumes:
+  postgres_data:
+```
+
+**backend/Dockerfile:**
+```dockerfile
+FROM node:18-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+EXPOSE 3001
+
+CMD ["npm", "run", "dev"]
+```
+
+**backend/.env.development:**
+```env
+# Local Docker PostgreSQL
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/the_beyond
+NODE_ENV=development
+PORT=3001
+
+# For local testing without Supabase Auth, use simple auth
+USE_SIMPLE_AUTH=true
+```
+
+### Local Database Connection
+
+```typescript
+// backend/src/db/connection.ts
+import { Pool } from 'pg';
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
+
+export const query = async (text: string, params?: any[]) => {
+  const start = Date.now();
+  const res = await pool.query(text, params);
+  const duration = Date.now() - start;
+  console.log('Executed query', { text, duration, rows: res.rowCount });
+  return res;
+};
+
+export default pool;
+```
+
+### Running Locally with Docker
+
+```bash
+# Start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+
+# Reset database (warning: deletes all data)
+docker-compose down -v
+docker-compose up -d
+```
+
+-----
+
 ## Deployment & Infrastructure
+
+### Migration Path: Docker → Supabase + Render
+
+When you're ready to deploy to production, follow this migration path:
+
+1. **Local Development** → Docker PostgreSQL + local Node server
+2. **Production** → Supabase PostgreSQL + Render hosted backend
+
+**Key Differences:**
+- **Authentication:** Local uses simple auth or device IDs; Production uses Supabase Auth
+- **Database:** Local uses `pg` driver directly; Production uses Supabase client
+- **Environment:** Different connection strings and API keys
 
 ### Supabase Setup
 
@@ -1513,7 +1843,7 @@ Response: {
    - Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY
    - Configure API endpoint to point to Render backend
 
-### Database Connection Example
+### Production Database Connection (Supabase)
 
 ```typescript
 // backend/src/db/supabase.ts
@@ -1542,20 +1872,263 @@ export const createUserClient = (userToken: string) => {
 };
 ```
 
+### Unified Database Abstraction Layer
+
+To support both Docker (local) and Supabase (production), create an abstraction layer:
+
+```typescript
+// backend/src/db/index.ts
+import { Pool } from 'pg';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+
+// Determine which database connection to use
+const isDevelopment = process.env.NODE_ENV === 'development';
+const useDockerDB = isDevelopment && !process.env.SUPABASE_URL;
+
+let pgPool: Pool | null = null;
+let supabaseClient: SupabaseClient | null = null;
+
+if (useDockerDB) {
+  // Local Docker PostgreSQL
+  pgPool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: false
+  });
+  console.log('Using Docker PostgreSQL');
+} else {
+  // Production Supabase
+  supabaseClient = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    }
+  );
+  console.log('Using Supabase PostgreSQL');
+}
+
+// Unified query interface
+export const db = {
+  async query(text: string, params?: any[]) {
+    if (pgPool) {
+      return pgPool.query(text, params);
+    } else if (supabaseClient) {
+      // Convert SQL query to Supabase query
+      // Note: For complex queries, you may need to use supabase.rpc()
+      throw new Error('Direct SQL queries not supported with Supabase client. Use supabase methods or RPC.');
+    }
+    throw new Error('No database connection available');
+  },
+
+  get supabase() {
+    return supabaseClient;
+  },
+
+  get pool() {
+    return pgPool;
+  }
+};
+
+export { supabaseClient, pgPool };
+```
+
+### Migration Checklist: Local → Production
+
+**Before Migration:**
+- [ ] Test all features locally with Docker
+- [ ] Ensure database schema is finalized
+- [ ] Export any test data you want to preserve
+
+**Migration Steps:**
+
+1. **Set up Supabase:**
+   ```bash
+   # Create project on Supabase dashboard
+   # Copy the schema from schema.sql to Supabase SQL Editor
+   # Note your project URL and keys
+   ```
+
+2. **Update Environment Variables:**
+   ```bash
+   # backend/.env.production
+   NODE_ENV=production
+   SUPABASE_URL=https://your-project.supabase.co
+   SUPABASE_ANON_KEY=your_anon_key
+   SUPABASE_SERVICE_KEY=your_service_key
+   ```
+
+3. **Test Supabase Connection Locally:**
+   ```bash
+   # Temporarily use Supabase in local environment
+   cp .env.production .env
+   npm run dev
+   # Verify everything works, then revert to Docker for development
+   ```
+
+4. **Deploy to Render:**
+   ```bash
+   git push origin main
+   # Configure Render service with production env vars
+   # Deploy
+   ```
+
+5. **Migrate Data (if needed):**
+   ```bash
+   # Export from Docker
+   docker exec the-beyond-db pg_dump -U postgres the_beyond > backup.sql
+
+   # Import to Supabase (using psql with Supabase connection string)
+   psql "postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres" < backup.sql
+   ```
+
+### Environment Variable Reference
+
+**Local Development (Docker):**
+```env
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/the_beyond
+NODE_ENV=development
+PORT=3001
+USE_SIMPLE_AUTH=true
+```
+
+**Production (Render + Supabase):**
+```env
+NODE_ENV=production
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_KEY=your_service_key
+PORT=3001
+```
+
 -----
 
 ## Quick Start Commands
+
+### Option 1: Local Development with Docker (Recommended)
+
+```bash
+# Install Docker and Docker Compose first (if not already installed)
+
+# Clone or create your project
+mkdir the-beyond && cd the-beyond
+
+# Backend setup
+cd backend
+npm init -y
+npm install express typescript ts-node @types/node @types/express pg @types/pg @supabase/supabase-js node-cron dotenv
+npm install -D nodemon
+npx tsc --init
+
+# Create .env.development file
+cat > .env.development << EOF
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/the_beyond
+NODE_ENV=development
+PORT=3001
+USE_SIMPLE_AUTH=true
+EOF
+
+# Create Dockerfile
+cat > Dockerfile << 'EOF'
+FROM node:18-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+EXPOSE 3001
+
+CMD ["npm", "run", "dev"]
+EOF
+
+cd ..
+
+# Create docker-compose.yml at project root
+cat > docker-compose.yml << 'EOF'
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: the-beyond-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: the_beyond
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/src/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: the-beyond-backend
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/the_beyond
+      NODE_ENV: development
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: npm run dev
+
+volumes:
+  postgres_data:
+EOF
+
+# Frontend setup
+cd frontend
+npx create-next-app@latest . --typescript --tailwind --app
+npm install lucide-react @supabase/supabase-js
+
+# Create .env.local file
+cat > .env.local << EOF
+NEXT_PUBLIC_API_URL=http://localhost:3001
+EOF
+
+cd ..
+
+# Start everything with Docker
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Frontend runs separately (not in Docker for faster development)
+cd frontend && npm run dev
+```
+
+### Option 2: Direct Setup (Production or Supabase Testing)
 
 ```bash
 # Backend
 cd backend
 npm init -y
-npm install express typescript ts-node @types/node @types/express @supabase/supabase-js node-cron dotenv
+npm install express typescript ts-node @types/node @types/express pg @types/pg @supabase/supabase-js node-cron dotenv
 npm install -D nodemon
 npx tsc --init
 
-# Create .env file
+# Create .env file for Supabase
 cat > .env << EOF
+NODE_ENV=production
 SUPABASE_URL=your_supabase_project_url
 SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_KEY=your_supabase_service_key
@@ -1571,18 +2144,49 @@ npm install lucide-react @supabase/supabase-js
 cat > .env.local << EOF
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_API_URL=http://localhost:3001
 EOF
 
 # Run locally
 cd backend && npm run dev
 cd frontend && npm run dev
+```
 
-# Deploy to Render
-# 1. Push code to GitHub
-# 2. Create new Web Service on Render
-# 3. Connect your repository
-# 4. Set environment variables (SUPABASE_URL, SUPABASE_ANON_KEY, etc.)
-# 5. Deploy
+### Deploying to Production (Render + Supabase)
+
+```bash
+# 1. Set up Supabase
+# - Go to https://supabase.com and create a project
+# - Run the schema.sql in the SQL Editor
+# - Note your project URL and API keys
+
+# 2. Prepare your repository
+git init
+git add .
+git commit -m "Initial commit"
+git remote add origin your-github-repo-url
+git push -u origin main
+
+# 3. Deploy Backend to Render
+# - Go to https://render.com
+# - Create new Web Service
+# - Connect your GitHub repository
+# - Set build command: cd backend && npm install && npm run build
+# - Set start command: cd backend && npm start
+# - Add environment variables:
+#   SUPABASE_URL=...
+#   SUPABASE_ANON_KEY=...
+#   SUPABASE_SERVICE_KEY=...
+#   NODE_ENV=production
+
+# 4. Deploy Frontend to Vercel (or Render)
+# - Go to https://vercel.com
+# - Import your GitHub repository
+# - Set environment variables:
+#   NEXT_PUBLIC_SUPABASE_URL=...
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+#   NEXT_PUBLIC_API_URL=https://your-backend.onrender.com
+# - Deploy
 ```
 
 -----
